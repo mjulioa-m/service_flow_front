@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { mockSprintsApi, mockDesarrollosApi, Sprint, Desarrollo } from '@/lib/mockData';
+import { mockSprintsApi, mockDesarrollosApi, mockDailiesApi, Sprint, Desarrollo, Daily } from '@/lib/mockData';
 
 export default function SprintDetailPage() {
   const params = useParams();
@@ -13,6 +13,7 @@ export default function SprintDetailPage() {
   const [sprint, setSprint] = useState<Sprint | null>(null);
   const [desarrollos, setDesarrollos] = useState<Desarrollo[]>([]);
   const [desarrollosDisponibles, setDesarrollosDisponibles] = useState<Desarrollo[]>([]);
+  const [dailies, setDailies] = useState<Daily[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,6 +21,7 @@ export default function SprintDetailPage() {
     if (sprintId) {
       loadSprint();
       loadDesarrollos();
+      loadDailies();
     }
   }, [sprintId]);
 
@@ -55,6 +57,15 @@ export default function SprintDetailPage() {
       setDesarrollosDisponibles(desarrollosDisponibles);
     } catch (err) {
       console.error('Error al cargar desarrollos:', err);
+    }
+  };
+
+  const loadDailies = async () => {
+    try {
+      const dailiesData = await mockDailiesApi.getBySprint(sprintId);
+      setDailies(dailiesData);
+    } catch (err) {
+      console.error('Error al cargar dailies:', err);
     }
   };
 
@@ -347,6 +358,72 @@ export default function SprintDetailPage() {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Dailies ({dailies.length})
+            </h2>
+            <Link
+              href="/dailies"
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+            >
+              <span className="mr-2">+</span>
+              Nueva Daily
+            </Link>
+          </div>
+
+          {dailies.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
+              <p className="text-gray-600 font-medium">No hay dailies para este sprint</p>
+              <p className="text-sm text-gray-400 mt-1">Crea una daily para registrar el progreso diario</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {dailies
+                .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+                .map((daily) => (
+                  <Link
+                    key={daily.id}
+                    href={`/dailies/${daily.id}`}
+                    className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-all bg-gradient-to-br from-white to-gray-50"
+                  >
+                    <div className="flex items-center mb-3">
+                      <svg className="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-sm font-semibold text-gray-900">
+                        {new Date(daily.fecha).toLocaleDateString('es-ES', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center text-gray-600">
+                        <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        {daily.desarrollos.length} desarrollo{daily.desarrollos.length !== 1 ? 's' : ''}
+                      </div>
+                      {daily.bloqueadores.length > 0 && (
+                        <div className="flex items-center text-red-600">
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          {daily.bloqueadores.length} bloqueador{daily.bloqueadores.length !== 1 ? 'es' : ''}
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+            </div>
+          )}
         </div>
 
         <div>

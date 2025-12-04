@@ -42,6 +42,11 @@ export default function DailiesPage() {
     }
   };
 
+  const handleDailyCreated = () => {
+    setShowForm(false);
+    loadDailies();
+  };
+
   const handleDeleteDaily = async (id: string, fecha: string) => {
     if (!confirm(`¿Estás seguro de que quieres eliminar la daily del ${formatDate(fecha)}?\n\nEsta acción no se puede deshacer.`)) {
       return;
@@ -56,17 +61,6 @@ export default function DailiesPage() {
     }
   };
 
-  const getSprintNombre = (sprintId?: string) => {
-    if (!sprintId) return null;
-    const sprint = sprints.find(s => s.id === sprintId);
-    return sprint ? sprint.nombre : null;
-  };
-
-  const handleDailyCreated = () => {
-    setShowForm(false);
-    loadDailies();
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
@@ -78,15 +72,28 @@ export default function DailiesPage() {
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
     
     if (hours > 0) {
-      return `${hours}h ${minutes}m ${secs}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
+      return `${hours}h ${minutes}m`;
     }
-    return `${secs}s`;
+    return `${minutes}m`;
   };
+
+  const getSprintNombre = (sprintId?: string) => {
+    if (!sprintId) return null;
+    const sprint = sprints.find(s => s.id === sprintId);
+    return sprint ? sprint.nombre : null;
+  };
+
+  // Agrupar dailies por sprint
+  const dailiesPorSprint = dailies.reduce((acc, daily) => {
+    const sprintKey = daily.sprintId || 'sin-sprint';
+    if (!acc[sprintKey]) {
+      acc[sprintKey] = [];
+    }
+    acc[sprintKey].push(daily);
+    return acc;
+  }, {} as Record<string, Daily[]>);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -95,7 +102,7 @@ export default function DailiesPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dailies</h1>
             <p className="mt-2 text-sm text-gray-600">
-              Reuniones diarias para sincronizar el equipo y compartir progreso
+              Entregas diarias de los desarrollos del sprint
             </p>
           </div>
           <button
@@ -152,130 +159,126 @@ export default function DailiesPage() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Sprint
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Desarrollos
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Bloqueadores
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Notas
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {dailies
-                  .sort((a, b) => {
-                    // Ordenar por fecha (más reciente primero)
-                    return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
-                  })
-                  .map((daily, index) => (
-                    <tr
-                      key={daily.id}
-                      className="hover:bg-gray-50 transition-colors animate-fadeIn"
-                      style={{ animationDelay: `${index * 0.05}s` }}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <svg className="w-4 h-4 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          <span className="text-sm font-semibold text-gray-900">{formatDate(daily.fecha)}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {daily.sprintId ? (
-                          getSprintNombre(daily.sprintId) ? (
-                            <Link
-                              href={`/sprints/${daily.sprintId}`}
-                              className="inline-flex items-center text-sm text-primary-600 hover:text-primary-700 font-medium"
-                            >
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                              </svg>
-                              {getSprintNombre(daily.sprintId)}
-                            </Link>
-                          ) : (
-                            <span className="text-sm text-gray-500 font-medium">{daily.sprintId}</span>
-                          )
+        <div className="space-y-8">
+          {Object.entries(dailiesPorSprint)
+            .sort(([a], [b]) => {
+              if (a === 'sin-sprint') return 1;
+              if (b === 'sin-sprint') return -1;
+              return 0;
+            })
+            .map(([sprintKey, dailiesDelSprint]) => {
+              const sprintId = sprintKey === 'sin-sprint' ? null : sprintKey;
+              const sprintNombre = sprintId ? getSprintNombre(sprintId) : null;
+              
+              return (
+                <div key={sprintKey} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-primary-50 to-primary-100 px-6 py-4 border-b border-primary-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <svg className="w-6 h-6 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        {sprintNombre ? (
+                          <Link
+                            href={`/sprints/${sprintId}`}
+                            className="text-xl font-bold text-gray-900 hover:text-primary-600 transition-colors"
+                          >
+                            {sprintNombre}
+                          </Link>
                         ) : (
-                          <span className="text-sm text-gray-400">Sin sprint</span>
+                          <h2 className="text-xl font-bold text-gray-900">Sin Sprint</h2>
                         )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm">
-                          {daily.desarrollos.length > 0 ? (
-                            <div className="space-y-1">
-                              <span className="font-semibold text-gray-900">{daily.desarrollos.length}</span>
-                              <span className="text-gray-500"> desarrollo{daily.desarrollos.length !== 1 ? 's' : ''}</span>
-                              <div className="text-xs text-gray-500 mt-1">
-                                Total: {formatTime(daily.desarrollos.reduce((sum, d) => sum + d.tiempoGastado, 0))}
+                        <span className="ml-3 px-3 py-1 text-xs font-semibold rounded-full bg-primary-200 text-primary-800">
+                          {dailiesDelSprint.length} daily{dailiesDelSprint.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {dailiesDelSprint
+                        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+                        .map((daily) => (
+                          <div
+                            key={daily.id}
+                            className="border border-gray-200 rounded-lg p-5 hover:shadow-lg transition-all bg-gradient-to-br from-white to-gray-50"
+                          >
+                            <div className="flex justify-between items-start mb-3">
+                              <div>
+                                <div className="flex items-center mb-2">
+                                  <svg className="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {formatDate(daily.fecha)}
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteDaily(daily.id, daily.fecha)}
+                                className="text-red-600 hover:text-red-800 transition-colors"
+                                title="Eliminar daily"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+
+                            <div className="space-y-3 mb-4">
+                              <div className="flex items-center text-sm">
+                                <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                                <span className="font-semibold text-gray-900">{daily.desarrollos.length}</span>
+                                <span className="text-gray-500 ml-1">desarrollo{daily.desarrollos.length !== 1 ? 's' : ''}</span>
+                              </div>
+
+                              {daily.bloqueadores.length > 0 && (
+                                <div className="flex items-center text-sm">
+                                  <svg className="w-4 h-4 mr-2 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  <span className="font-semibold text-red-600">{daily.bloqueadores.length}</span>
+                                  <span className="text-gray-500 ml-1">bloqueador{daily.bloqueadores.length !== 1 ? 'es' : ''}</span>
+                                </div>
+                              )}
+
+                              <div className="flex items-center text-sm">
+                                <svg className="w-4 h-4 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-gray-700">
+                                  {formatTime(daily.desarrollos.reduce((sum, d) => sum + d.tiempoGastado, 0))}
+                                </span>
                               </div>
                             </div>
-                          ) : (
-                            <span className="text-gray-400">Sin desarrollos</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {daily.bloqueadores.length > 0 ? (
-                          <div className="flex items-center">
-                            <span className="text-red-600 mr-1">🚫</span>
-                            <span className="text-sm font-semibold text-red-600">{daily.bloqueadores.length}</span>
-                            <span className="text-sm text-gray-500 ml-1">bloqueador{daily.bloqueadores.length !== 1 ? 'es' : ''}</span>
+
+                            {daily.notas && (
+                              <p className="text-xs text-gray-600 line-clamp-2 mb-4 bg-gray-50 p-2 rounded">
+                                {daily.notas}
+                              </p>
+                            )}
+
+                            <Link
+                              href={`/dailies/${daily.id}`}
+                              className="inline-flex items-center text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+                            >
+                              Ver detalles
+                              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </Link>
                           </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">Sin bloqueadores</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {daily.notas ? (
-                          <p className="text-sm text-gray-600 line-clamp-2 max-w-xs">{daily.notas}</p>
-                        ) : (
-                          <span className="text-sm text-gray-400">Sin notas</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-3">
-                          <Link
-                            href={`/dailies/${daily.id}`}
-                            className="text-primary-600 hover:text-primary-900 font-semibold"
-                          >
-                            Ver detalles →
-                          </Link>
-                          <button
-                            onClick={() => handleDeleteDaily(daily.id, daily.fecha)}
-                            className="text-red-600 hover:text-red-800 transition-colors"
-                            title="Eliminar daily"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
         </div>
       )}
     </div>
   );
 }
-

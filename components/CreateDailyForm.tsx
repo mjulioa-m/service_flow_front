@@ -17,6 +17,7 @@ export default function CreateDailyForm({ onSuccess }: CreateDailyFormProps) {
   });
   const [desarrollos, setDesarrollos] = useState<Desarrollo[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
+  const [sprintSeleccionado, setSprintSeleccionado] = useState<Sprint | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentDesarrollo, setCurrentDesarrollo] = useState({
@@ -28,16 +29,43 @@ export default function CreateDailyForm({ onSuccess }: CreateDailyFormProps) {
   const [currentBloqueador, setCurrentBloqueador] = useState('');
 
   useEffect(() => {
-    loadDesarrollos();
     loadSprints();
   }, []);
 
-  const loadDesarrollos = async () => {
+  useEffect(() => {
+    if (formData.sprintId) {
+      loadDesarrollosDelSprint(formData.sprintId);
+      loadSprintSeleccionado(formData.sprintId);
+    } else {
+      setDesarrollos([]);
+      setSprintSeleccionado(null);
+      // Limpiar desarrollos seleccionados cuando se cambia el sprint
+      setFormData(prev => ({ ...prev, desarrollos: [] }));
+    }
+  }, [formData.sprintId]);
+
+  const loadDesarrollosDelSprint = async (sprintId: string) => {
     try {
-      const data = await mockDesarrollosApi.getAll();
-      setDesarrollos(data);
+      const sprint = await mockSprintsApi.getById(sprintId);
+      const allDesarrollos = await mockDesarrollosApi.getAll();
+      // Solo mostrar desarrollos que están en el sprint
+      const desarrollosEnSprint = allDesarrollos.filter(d => 
+        sprint.desarrollos.includes(d.id)
+      );
+      setDesarrollos(desarrollosEnSprint);
     } catch (err) {
-      console.error('Error al cargar desarrollos:', err);
+      console.error('Error al cargar desarrollos del sprint:', err);
+      setDesarrollos([]);
+    }
+  };
+
+  const loadSprintSeleccionado = async (sprintId: string) => {
+    try {
+      const sprint = await mockSprintsApi.getById(sprintId);
+      setSprintSeleccionado(sprint);
+    } catch (err) {
+      console.error('Error al cargar sprint:', err);
+      setSprintSeleccionado(null);
     }
   };
 
@@ -164,51 +192,81 @@ export default function CreateDailyForm({ onSuccess }: CreateDailyFormProps) {
 
           <div>
             <label htmlFor="sprintId" className="block text-sm font-medium text-gray-700 mb-1">
-              Sprint (opcional)
+              Sprint *
             </label>
             <select
               id="sprintId"
+              required
               value={formData.sprintId || ''}
-              onChange={(e) => setFormData({ ...formData, sprintId: e.target.value || undefined })}
+              onChange={(e) => setFormData({ ...formData, sprintId: e.target.value || undefined, desarrollos: [] })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
-              <option value="">Sin sprint</option>
+              <option value="">Seleccionar sprint</option>
               {sprints.map((sprint) => (
                 <option key={sprint.id} value={sprint.id}>
                   {sprint.nombre}
                 </option>
               ))}
             </select>
+            {sprintSeleccionado && (
+              <p className="text-xs text-gray-500 mt-1">
+                Sprint: {sprintSeleccionado.nombre} - {desarrollos.length} desarrollo{desarrollos.length !== 1 ? 's' : ''} disponible{desarrollos.length !== 1 ? 's' : ''}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <svg className="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            Agregar Desarrollo
-          </h3>
-          <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Desarrollo *
-              </label>
-              <select
-                value={currentDesarrollo.desarrolloId}
-                onChange={(e) =>
-                  setCurrentDesarrollo({ ...currentDesarrollo, desarrolloId: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">Seleccionar desarrollo</option>
-                {desarrollos.map((dev) => (
-                  <option key={dev.id} value={dev.id}>
-                    {dev.titulo}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {!formData.sprintId && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-sm text-yellow-800">
+              <strong>⚠️ Selecciona un sprint primero</strong> para ver los desarrollos disponibles.
+            </p>
+          </div>
+        )}
+
+        {formData.sprintId && desarrollos.length === 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm text-red-800">
+              <strong>⚠️ No hay desarrollos en este sprint.</strong> Agrega desarrollos al sprint antes de crear una daily.
+            </p>
+          </div>
+        )}
+
+        {formData.sprintId && desarrollos.length > 0 && (
+          <div className="border-t border-gray-200 pt-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <svg className="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Agregar Desarrollo del Sprint
+            </h3>
+            <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Desarrollo *
+                </label>
+                <select
+                  value={currentDesarrollo.desarrolloId}
+                  onChange={(e) =>
+                    setCurrentDesarrollo({ ...currentDesarrollo, desarrolloId: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Seleccionar desarrollo</option>
+                  {desarrollos
+                    .filter(dev => !formData.desarrollos.some(d => d.desarrolloId === dev.id))
+                    .map((dev) => (
+                      <option key={dev.id} value={dev.id}>
+                        {dev.titulo}
+                      </option>
+                    ))}
+                </select>
+                {formData.desarrollos.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {desarrollos.length - formData.desarrollos.length} desarrollo{desarrollos.length - formData.desarrollos.length !== 1 ? 's' : ''} disponible{desarrollos.length - formData.desarrollos.length !== 1 ? 's' : ''} del sprint
+                  </p>
+                )}
+              </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -264,7 +322,7 @@ export default function CreateDailyForm({ onSuccess }: CreateDailyFormProps) {
             <button
               type="button"
               onClick={handleAddDesarrollo}
-              disabled={!currentDesarrollo.desarrolloId || !currentDesarrollo.trabajoHoy}
+              disabled={!currentDesarrollo.desarrolloId || !currentDesarrollo.trabajoHoy || formData.desarrollos.some(d => d.desarrolloId === currentDesarrollo.desarrolloId)}
               className="w-full bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               + Agregar Desarrollo
@@ -312,7 +370,8 @@ export default function CreateDailyForm({ onSuccess }: CreateDailyFormProps) {
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -390,7 +449,7 @@ export default function CreateDailyForm({ onSuccess }: CreateDailyFormProps) {
         <div className="flex justify-end pt-4 border-t border-gray-200">
           <button
             type="submit"
-            disabled={loading || formData.desarrollos.length === 0}
+            disabled={loading || !formData.sprintId || formData.desarrollos.length === 0}
             className="inline-flex items-center px-6 py-3 border border-transparent rounded-lg shadow-lg text-sm font-semibold text-white bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
             {loading ? (
