@@ -46,12 +46,23 @@ export interface DailyDesarrollo {
   tiempoGastado: number; // en segundos
 }
 
+export interface Ticket {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  estado: 'NUEVO' | 'EN_CURSO' | 'CERRADO';
+  prioridad: 'BAJA' | 'MEDIA' | 'ALTA';
+  fechaCreacion: string;
+  fechaActualizacion: string;
+}
+
 // Funciones de localStorage
 const STORAGE_KEYS = {
   DESARROLLOS: 'serviceflow_desarrollos',
   COMENTARIOS: 'serviceflow_comentarios',
   SPRINTS: 'serviceflow_sprints',
   DAILIES: 'serviceflow_dailies',
+  TICKETS: 'serviceflow_tickets',
 };
 
 const getFromStorage = <T>(key: string, defaultValue: T): T => {
@@ -511,5 +522,67 @@ export const mockDailiesApi = {
     dailiesData[index] = { ...dailiesData[index], ...data };
     saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
     return dailiesData[index];
+  },
+};
+
+// Funciones para Tickets
+let ticketsData: Ticket[] = getFromStorage(STORAGE_KEYS.TICKETS, []);
+
+export const mockTicketsApi = {
+  getAll: async (): Promise<Ticket[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    return ticketsData;
+  },
+
+  getById: async (id: string): Promise<Ticket> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    const ticket = ticketsData.find(t => t.id === id);
+    if (!ticket) {
+      throw new Error('Ticket no encontrado');
+    }
+    return ticket;
+  },
+
+  create: async (data: Omit<Ticket, 'id' | 'fechaCreacion' | 'fechaActualizacion'>): Promise<Ticket> => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    const newTicket: Ticket = {
+      ...data,
+      id: Date.now().toString(),
+      fechaCreacion: new Date().toISOString(),
+      fechaActualizacion: new Date().toISOString(),
+    };
+    ticketsData.push(newTicket);
+    saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+    return newTicket;
+  },
+
+  update: async (id: string, data: Partial<Ticket>): Promise<Ticket> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    const index = ticketsData.findIndex(t => t.id === id);
+    if (index === -1) {
+      throw new Error('Ticket no encontrado');
+    }
+    ticketsData[index] = {
+      ...ticketsData[index],
+      ...data,
+      fechaActualizacion: new Date().toISOString(),
+    };
+    saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+    return ticketsData[index];
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    const index = ticketsData.findIndex(t => t.id === id);
+    if (index === -1) {
+      throw new Error('Ticket no encontrado');
+    }
+    ticketsData.splice(index, 1);
+    saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
   },
 };
