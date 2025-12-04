@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { mockDailiesApi, Daily } from '@/lib/mockData';
+import { useRouter } from 'next/navigation';
+import { mockDailiesApi, mockSprintsApi, Daily, Sprint } from '@/lib/mockData';
 import CreateDailyForm from '@/components/CreateDailyForm';
 
 export default function DailiesPage() {
+  const router = useRouter();
   const [dailies, setDailies] = useState<Daily[]>([]);
+  const [sprints, setSprints] = useState<Sprint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     loadDailies();
+    loadSprints();
   }, []);
 
   const loadDailies = async () => {
@@ -27,6 +31,35 @@ export default function DailiesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadSprints = async () => {
+    try {
+      const data = await mockSprintsApi.getAll();
+      setSprints(data);
+    } catch (err) {
+      console.error('Error al cargar sprints:', err);
+    }
+  };
+
+  const handleDeleteDaily = async (id: string, fecha: string) => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar la daily del ${formatDate(fecha)}?\n\nEsta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      await mockDailiesApi.delete(id);
+      loadDailies();
+    } catch (err) {
+      setError('Error al eliminar la daily');
+      console.error(err);
+    }
+  };
+
+  const getSprintNombre = (sprintId?: string) => {
+    if (!sprintId) return null;
+    const sprint = sprints.find(s => s.id === sprintId);
+    return sprint ? sprint.nombre : null;
   };
 
   const handleDailyCreated = () => {
@@ -166,7 +199,19 @@ export default function DailiesPage() {
                       </td>
                       <td className="px-6 py-4">
                         {daily.sprintId ? (
-                          <span className="text-sm text-gray-900 font-medium">{daily.sprintId}</span>
+                          getSprintNombre(daily.sprintId) ? (
+                            <Link
+                              href={`/sprints/${daily.sprintId}`}
+                              className="inline-flex items-center text-sm text-primary-600 hover:text-primary-700 font-medium"
+                            >
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              {getSprintNombre(daily.sprintId)}
+                            </Link>
+                          ) : (
+                            <span className="text-sm text-gray-500 font-medium">{daily.sprintId}</span>
+                          )
                         ) : (
                           <span className="text-sm text-gray-400">Sin sprint</span>
                         )}
@@ -205,12 +250,23 @@ export default function DailiesPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          href={`/dailies/${daily.id}`}
-                          className="text-primary-600 hover:text-primary-900 font-semibold"
-                        >
-                          Ver detalles →
-                        </Link>
+                        <div className="flex items-center justify-end gap-3">
+                          <Link
+                            href={`/dailies/${daily.id}`}
+                            className="text-primary-600 hover:text-primary-900 font-semibold"
+                          >
+                            Ver detalles →
+                          </Link>
+                          <button
+                            onClick={() => handleDeleteDaily(daily.id, daily.fecha)}
+                            className="text-red-600 hover:text-red-800 transition-colors"
+                            title="Eliminar daily"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

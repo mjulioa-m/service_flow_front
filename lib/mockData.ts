@@ -524,6 +524,16 @@ export const mockDailiesApi = {
     saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
     return dailiesData[index];
   },
+
+  delete: async (id: string): Promise<void> => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const index = dailiesData.findIndex(d => d.id === id);
+    if (index === -1) {
+      throw new Error('Daily no encontrado');
+    }
+    dailiesData.splice(index, 1);
+    saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+  },
 };
 
 // Funciones para Tickets
