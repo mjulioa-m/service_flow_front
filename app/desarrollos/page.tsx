@@ -6,11 +6,16 @@ import { usePathname } from 'next/navigation';
 import { mockDesarrollosApi, Desarrollo } from '@/lib/mockData';
 import CreateDesarrolloForm from '@/components/CreateDesarrolloForm';
 
+type SortField = 'titulo' | 'estado' | 'soportista' | 'horasEstimadas' | 'tiempoGastado' | 'progreso';
+type SortDirection = 'asc' | 'desc';
+
 export default function DesarrollosPage() {
   const [desarrollos, setDesarrollos] = useState<Desarrollo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const pathname = usePathname();
 
   useEffect(() => {
@@ -85,6 +90,107 @@ export default function DesarrollosPage() {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getEstadoRowColor = (estado: string) => {
+    switch (estado) {
+      case 'PENDIENTE':
+        return 'bg-gray-50 hover:bg-gray-100';
+      case 'EN_SOPORTE':
+        return 'bg-blue-50 hover:bg-blue-100';
+      case 'ENTREGADO_AL_CLIENTE':
+        return 'bg-green-50 hover:bg-green-100';
+      default:
+        return 'bg-white hover:bg-gray-50';
+    }
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Si ya está ordenado por este campo, cambiar la dirección
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Si es un campo nuevo, ordenar ascendente
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortedDesarrollos = () => {
+    if (!sortField) {
+      // Ordenamiento por defecto
+      return [...desarrollos].sort((a, b) => {
+        if (b.horasEstimadas !== a.horasEstimadas) {
+          return b.horasEstimadas - a.horasEstimadas;
+        }
+        return b.tiempoGastado - a.tiempoGastado;
+      });
+    }
+
+    return [...desarrollos].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortField) {
+        case 'titulo':
+          aValue = a.titulo.toLowerCase();
+          bValue = b.titulo.toLowerCase();
+          break;
+        case 'estado':
+          aValue = a.estado;
+          bValue = b.estado;
+          break;
+        case 'soportista':
+          aValue = a.soportista || '';
+          bValue = b.soportista || '';
+          break;
+        case 'horasEstimadas':
+          aValue = a.horasEstimadas;
+          bValue = b.horasEstimadas;
+          break;
+        case 'tiempoGastado':
+          aValue = a.tiempoGastado;
+          bValue = b.tiempoGastado;
+          break;
+        case 'progreso':
+          const aProgreso = a.horasEstimadas > 0 ? (a.tiempoGastado / 3600) / a.horasEstimadas : 0;
+          const bProgreso = b.horasEstimadas > 0 ? (b.tiempoGastado / 3600) / b.horasEstimadas : 0;
+          aValue = aProgreso;
+          bValue = bProgreso;
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDirection === 'asc' 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      } else {
+        return sortDirection === 'asc' 
+          ? (aValue > bValue ? 1 : -1)
+          : (aValue < bValue ? 1 : -1);
+      }
+    });
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) {
+      return (
+        <svg className="w-4 h-4 ml-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      );
+    }
+    return sortDirection === 'asc' ? (
+      <svg className="w-4 h-4 ml-1 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 ml-1 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
   };
 
   const getHorasColor = (horasEstimadas: number, tiempoGastado: number) => {
@@ -215,23 +321,59 @@ export default function DesarrollosPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Desarrollo
+                  <th 
+                    className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                    onClick={() => handleSort('titulo')}
+                  >
+                    <div className="flex items-center">
+                      Desarrollo
+                      <SortIcon field="titulo" />
+                    </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Estado
+                  <th 
+                    className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                    onClick={() => handleSort('estado')}
+                  >
+                    <div className="flex items-center">
+                      Estado
+                      <SortIcon field="estado" />
+                    </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Soportista
+                  <th 
+                    className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                    onClick={() => handleSort('soportista')}
+                  >
+                    <div className="flex items-center">
+                      Soportista
+                      <SortIcon field="soportista" />
+                    </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Horas Estimadas
+                  <th 
+                    className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                    onClick={() => handleSort('horasEstimadas')}
+                  >
+                    <div className="flex items-center">
+                      Horas Estimadas
+                      <SortIcon field="horasEstimadas" />
+                    </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Tiempo Gastado
+                  <th 
+                    className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                    onClick={() => handleSort('tiempoGastado')}
+                  >
+                    <div className="flex items-center">
+                      Tiempo Gastado
+                      <SortIcon field="tiempoGastado" />
+                    </div>
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Progreso
+                  <th 
+                    className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
+                    onClick={() => handleSort('progreso')}
+                  >
+                    <div className="flex items-center">
+                      Progreso
+                      <SortIcon field="progreso" />
+                    </div>
                   </th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Acciones
@@ -239,19 +381,11 @@ export default function DesarrollosPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {desarrollos
-                  .sort((a, b) => {
-                    // Ordenar por horas estimadas (mayor a menor) como prioridad
-                    if (b.horasEstimadas !== a.horasEstimadas) {
-                      return b.horasEstimadas - a.horasEstimadas;
-                    }
-                    // Si tienen las mismas horas estimadas, ordenar por tiempo gastado
-                    return b.tiempoGastado - a.tiempoGastado;
-                  })
+                {getSortedDesarrollos()
                   .map((desarrollo, index) => (
                     <tr
                       key={desarrollo.id}
-                      className="hover:bg-gray-50 transition-colors animate-fadeIn"
+                      className={`${getEstadoRowColor(desarrollo.estado)} transition-colors animate-fadeIn`}
                       style={{ animationDelay: `${index * 0.05}s` }}
                     >
                       <td className="px-6 py-4">

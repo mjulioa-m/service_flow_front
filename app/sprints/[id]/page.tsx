@@ -50,11 +50,9 @@ export default function SprintDetailPage() {
       );
       setDesarrollos(desarrollosEnSprint);
       
-      // Desarrollos disponibles (no están en ningún sprint o están en este sprint)
-      const desarrollosDisponibles = allDesarrollos.filter(d => 
-        !d.sprintId || d.sprintId === sprintId
-      );
-      setDesarrollosDisponibles(desarrollosDisponibles);
+      // Desarrollos disponibles: todos los desarrollos que no están en este sprint
+      // (pueden estar en otro sprint o sin sprint)
+      setDesarrollosDisponibles(allDesarrollos);
     } catch (err) {
       console.error('Error al cargar desarrollos:', err);
     }
@@ -71,7 +69,18 @@ export default function SprintDetailPage() {
 
   const handleAddDesarrollo = async (desarrolloId: string) => {
     try {
-      // Actualizar el desarrollo para asignarlo al sprint
+      // Obtener el desarrollo actual para ver si está en otro sprint
+      const desarrolloActual = await mockDesarrollosApi.getById(desarrolloId);
+      
+      // Si el desarrollo está en otro sprint, removerlo de ese sprint primero
+      if (desarrolloActual.sprintId && desarrolloActual.sprintId !== sprintId) {
+        const otroSprint = await mockSprintsApi.getById(desarrolloActual.sprintId);
+        await mockSprintsApi.update(desarrolloActual.sprintId, {
+          desarrollos: otroSprint.desarrollos.filter(id => id !== desarrolloId),
+        });
+      }
+      
+      // Actualizar el desarrollo para asignarlo al sprint actual
       await mockDesarrollosApi.update(desarrolloId, { sprintId });
       
       // Actualizar el sprint para incluir el desarrollo
@@ -86,6 +95,7 @@ export default function SprintDetailPage() {
       loadSprint();
     } catch (err) {
       console.error('Error al agregar desarrollo:', err);
+      setError('Error al agregar el desarrollo al sprint');
     }
   };
 
@@ -440,15 +450,20 @@ export default function SprintDetailPage() {
                     className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
                   >
                     <p className="font-medium text-sm text-gray-900 mb-1">{desarrollo.titulo}</p>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-gray-500">{desarrollo.horasEstimadas}h estimadas</span>
-                      <button
-                        onClick={() => handleAddDesarrollo(desarrollo.id)}
-                        className="px-3 py-1 bg-primary-600 text-white text-xs font-semibold rounded-lg hover:bg-primary-700 transition-colors"
-                      >
-                        + Agregar
-                      </button>
+                      {desarrollo.sprintId && desarrollo.sprintId !== sprintId && (
+                        <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded">
+                          En otro sprint
+                        </span>
+                      )}
                     </div>
+                    <button
+                      onClick={() => handleAddDesarrollo(desarrollo.id)}
+                      className="w-full px-3 py-1 bg-primary-600 text-white text-xs font-semibold rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      {desarrollo.sprintId && desarrollo.sprintId !== sprintId ? 'Mover a este sprint' : '+ Agregar'}
+                    </button>
                   </div>
                 ))}
               </div>

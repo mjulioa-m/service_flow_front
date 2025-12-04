@@ -284,37 +284,48 @@ const migrateData = (): { migratedDesarrollos: Desarrollo[]; migratedDailies: Da
   return { migratedDesarrollos, migratedDailies };
 };
 
-// Cargar datos desde localStorage o usar valores por defecto
-let desarrollosData: Desarrollo[] = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
-let comentariosData: Comentario[] = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
-let sprintsData: Sprint[] = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
-let dailiesData: Daily[] = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
-
-// Migrar datos existentes si hay datos en localStorage
-if (typeof window !== 'undefined') {
-  if (localStorage.getItem(STORAGE_KEYS.DESARROLLOS)) {
-    // Hay datos existentes, migrarlos
-    const { migratedDesarrollos, migratedDailies } = migrateData();
-    desarrollosData = migratedDesarrollos;
-    dailiesData = migratedDailies;
-  } else {
-    // Si no hay datos en localStorage, guardar los valores por defecto
+// Función para inicializar datos solo si no existen
+const initializeDataIfNeeded = () => {
+  if (typeof window === 'undefined') return;
+  
+  // Solo inicializar si realmente no hay datos
+  if (!localStorage.getItem(STORAGE_KEYS.DESARROLLOS)) {
     saveToStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
-    saveToStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
-    saveToStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
-    saveToStorage(STORAGE_KEYS.DAILIES, defaultDailies);
-    desarrollosData = defaultDesarrollos;
-    comentariosData = defaultComentarios;
-    sprintsData = defaultSprints;
-    dailiesData = defaultDailies;
   }
+  if (!localStorage.getItem(STORAGE_KEYS.COMENTARIOS)) {
+    saveToStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.SPRINTS)) {
+    saveToStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.DAILIES)) {
+    saveToStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+  }
+  
+  // Migrar datos existentes si hay datos en localStorage
+  if (localStorage.getItem(STORAGE_KEYS.DESARROLLOS)) {
+    const { migratedDesarrollos, migratedDailies } = migrateData();
+    // Los datos migrados ya se guardaron en migrateData, solo actualizamos las variables
+  }
+};
+
+// Inicializar datos solo en el cliente
+if (typeof window !== 'undefined') {
+  initializeDataIfNeeded();
 }
+
+// Cargar datos desde localStorage o usar valores por defecto
+// Estas variables se actualizan en cada llamada a las APIs
+let desarrollosData: Desarrollo[] = [];
+let comentariosData: Comentario[] = [];
+let sprintsData: Sprint[] = [];
+let dailiesData: Daily[] = [];
 
 // Funciones para Desarrollos
 export const mockDesarrollosApi = {
   getAll: async (): Promise<Desarrollo[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    // Recargar desde localStorage para obtener datos actualizados
+    // Siempre recargar desde localStorage para obtener datos actualizados
     desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     return desarrollosData.map(desarrollo => ({
@@ -340,6 +351,8 @@ export const mockDesarrollosApi = {
 
   create: async (data: Omit<Desarrollo, 'id' | 'fechaCreacion' | 'fechaActualizacion' | 'tiempoGastado'>): Promise<Desarrollo> => {
     await new Promise(resolve => setTimeout(resolve, 400));
+    // Recargar datos actuales desde localStorage antes de crear
+    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const newDesarrollo: Desarrollo = {
       ...data,
       id: Date.now().toString(),
@@ -355,6 +368,8 @@ export const mockDesarrollosApi = {
 
   update: async (id: string, data: Partial<Desarrollo>): Promise<Desarrollo> => {
     await new Promise(resolve => setTimeout(resolve, 300));
+    // Recargar datos actuales desde localStorage antes de actualizar
+    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const index = desarrollosData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Desarrollo no encontrado');
@@ -370,6 +385,8 @@ export const mockDesarrollosApi = {
 
   addTime: async (id: string, seconds: number): Promise<Desarrollo> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    // Recargar datos actuales desde localStorage antes de actualizar
+    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const index = desarrollosData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Desarrollo no encontrado');
@@ -382,6 +399,9 @@ export const mockDesarrollosApi = {
 
   delete: async (id: string): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    // Recargar datos actuales desde localStorage antes de eliminar
+    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     const index = desarrollosData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Desarrollo no encontrado');
@@ -403,11 +423,13 @@ export const mockDesarrollosApi = {
 export const mockComentariosApi = {
   getByDesarrollo: async (desarrolloId: string): Promise<Comentario[]> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     return comentariosData.filter(c => c.desarrolloId === desarrolloId);
   },
 
   create: async (desarrolloId: string, data: { contenido: string }): Promise<Comentario> => {
     await new Promise(resolve => setTimeout(resolve, 300));
+    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     const newComentario: Comentario = {
       id: Date.now().toString(),
       desarrolloId,
@@ -424,11 +446,13 @@ export const mockComentariosApi = {
 export const mockSprintsApi = {
   getAll: async (): Promise<Sprint[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
+    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     return sprintsData;
   },
 
   getById: async (id: string): Promise<Sprint> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     const sprint = sprintsData.find(s => s.id === id);
     if (!sprint) {
       throw new Error('Sprint no encontrado');
@@ -438,6 +462,7 @@ export const mockSprintsApi = {
 
   create: async (data: Omit<Sprint, 'id'>): Promise<Sprint> => {
     await new Promise(resolve => setTimeout(resolve, 400));
+    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     const newSprint: Sprint = {
       ...data,
       id: Date.now().toString(),
@@ -449,6 +474,7 @@ export const mockSprintsApi = {
 
   update: async (id: string, data: Partial<Sprint>): Promise<Sprint> => {
     await new Promise(resolve => setTimeout(resolve, 300));
+    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     const index = sprintsData.findIndex(s => s.id === id);
     if (index === -1) {
       throw new Error('Sprint no encontrado');
@@ -460,6 +486,8 @@ export const mockSprintsApi = {
 
   delete: async (id: string): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const index = sprintsData.findIndex(s => s.id === id);
     if (index === -1) {
       throw new Error('Sprint no encontrado');
@@ -486,11 +514,14 @@ export const mockSprintsApi = {
 export const mockDailiesApi = {
   getAll: async (): Promise<Daily[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
+    // Siempre recargar desde localStorage
+    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     return dailiesData;
   },
 
   getById: async (id: string): Promise<Daily> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const daily = dailiesData.find(d => d.id === id);
     if (!daily) {
       throw new Error('Daily no encontrado');
@@ -500,11 +531,13 @@ export const mockDailiesApi = {
 
   getBySprint: async (sprintId: string): Promise<Daily[]> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     return dailiesData.filter(d => d.sprintId === sprintId);
   },
 
   create: async (data: Omit<Daily, 'id'>): Promise<Daily> => {
     await new Promise(resolve => setTimeout(resolve, 400));
+    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const newDaily: Daily = {
       ...data,
       id: Date.now().toString(),
@@ -516,6 +549,7 @@ export const mockDailiesApi = {
 
   update: async (id: string, data: Partial<Daily>): Promise<Daily> => {
     await new Promise(resolve => setTimeout(resolve, 300));
+    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const index = dailiesData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Daily no encontrado');
@@ -527,6 +561,7 @@ export const mockDailiesApi = {
 
   delete: async (id: string): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 200));
+    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const index = dailiesData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Daily no encontrado');
