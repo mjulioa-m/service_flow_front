@@ -150,11 +150,9 @@ export default function SprintDetailPage() {
     switch (estado) {
       case 'PENDIENTE':
         return 'bg-gray-100 text-gray-800';
-      case 'EN_DESARROLLO':
+      case 'EN_SOPORTE':
         return 'bg-blue-100 text-blue-800';
-      case 'EN_REVISION':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'COMPLETADO':
+      case 'ENTREGADO_AL_CLIENTE':
         return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';

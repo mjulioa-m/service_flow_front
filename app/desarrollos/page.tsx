@@ -78,11 +78,9 @@ export default function DesarrollosPage() {
     switch (estado) {
       case 'PENDIENTE':
         return 'bg-gray-100 text-gray-800';
-      case 'EN_DESARROLLO':
+      case 'EN_SOPORTE':
         return 'bg-blue-100 text-blue-800';
-      case 'EN_REVISION':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'COMPLETADO':
+      case 'ENTREGADO_AL_CLIENTE':
         return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -224,6 +222,9 @@ export default function DesarrollosPage() {
                     Estado
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Soportista
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Horas Estimadas
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
@@ -274,6 +275,15 @@ export default function DesarrollosPage() {
                         >
                           {desarrollo.estado}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {desarrollo.soportista ? (
+                          <span className="px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                            {desarrollo.soportista}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400">Sin asignar</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">

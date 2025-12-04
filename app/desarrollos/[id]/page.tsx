@@ -78,14 +78,34 @@ export default function DesarrolloDetailPage() {
     switch (estado) {
       case 'PENDIENTE':
         return 'bg-gray-100 text-gray-800';
-      case 'EN_DESARROLLO':
+      case 'EN_SOPORTE':
         return 'bg-blue-100 text-blue-800';
-      case 'EN_REVISION':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'COMPLETADO':
+      case 'ENTREGADO_AL_CLIENTE':
         return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleEstadoChange = async (newEstado: Desarrollo['estado']) => {
+    if (!desarrollo) return;
+    try {
+      const updated = await mockDesarrollosApi.update(desarrolloId, { estado: newEstado });
+      setDesarrollo(updated);
+    } catch (err) {
+      setError('Error al actualizar el estado');
+      console.error(err);
+    }
+  };
+
+  const handleSoportistaChange = async (newSoportista: Desarrollo['soportista']) => {
+    if (!desarrollo) return;
+    try {
+      const updated = await mockDesarrollosApi.update(desarrolloId, { soportista: newSoportista });
+      setDesarrollo(updated);
+    } catch (err) {
+      setError('Error al actualizar el soportista');
+      console.error(err);
     }
   };
 
@@ -166,16 +186,48 @@ export default function DesarrolloDetailPage() {
               <div className="flex-1">
                 <h1 className="text-3xl font-bold text-gray-900 mb-4">{desarrollo.titulo}</h1>
                 <div className="flex flex-wrap gap-3 mb-4">
-                  <span
-                    className={`px-4 py-2 text-sm font-semibold rounded-full shadow-sm ${getEstadoColor(
-                      desarrollo.estado,
-                    )}`}
-                  >
-                    {desarrollo.estado}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-4 py-2 text-sm font-semibold rounded-full shadow-sm ${getEstadoColor(
+                        desarrollo.estado,
+                      )}`}
+                    >
+                      {desarrollo.estado}
+                    </span>
+                    <select
+                      value={desarrollo.estado}
+                      onChange={(e) => handleEstadoChange(e.target.value as Desarrollo['estado'])}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      <option value="PENDIENTE">PENDIENTE</option>
+                      <option value="EN_SOPORTE">EN_SOPORTE</option>
+                      <option value="ENTREGADO_AL_CLIENTE">ENTREGADO_AL_CLIENTE</option>
+                    </select>
+                  </div>
                   <span className="px-4 py-2 text-sm font-semibold rounded-full shadow-sm bg-blue-100 text-blue-800">
                     {desarrollo.horasEstimadas}h estimadas
                   </span>
+                  {desarrollo.soportista && (
+                    <span className="px-4 py-2 text-sm font-semibold rounded-full shadow-sm bg-purple-100 text-purple-800">
+                      Soportista: {desarrollo.soportista}
+                    </span>
+                  )}
+                </div>
+                <div className="mb-4">
+                  <label htmlFor="soportista" className="block text-sm font-medium text-gray-700 mb-1">
+                    Soportista
+                  </label>
+                  <select
+                    id="soportista"
+                    value={desarrollo.soportista || ''}
+                    onChange={(e) => handleSoportistaChange(e.target.value ? e.target.value as Desarrollo['soportista'] : undefined)}
+                    className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin asignar</option>
+                    <option value="jose">Jose</option>
+                    <option value="estewill">Estewill</option>
+                    <option value="darwin">Darwin</option>
+                  </select>
                 </div>
               </div>
             </div>

@@ -13,6 +13,7 @@ export default function CreateDesarrolloForm({ onSuccess }: CreateDesarrolloForm
     descripcion: '',
     estado: 'PENDIENTE',
     horasEstimadas: 0,
+    soportista: undefined,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export default function CreateDesarrolloForm({ onSuccess }: CreateDesarrolloForm
         descripcion: '',
         estado: 'PENDIENTE',
         horasEstimadas: 0,
+        soportista: undefined,
       });
       onSuccess();
     } catch (err) {
@@ -95,9 +97,8 @@ export default function CreateDesarrolloForm({ onSuccess }: CreateDesarrolloForm
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               <option value="PENDIENTE">PENDIENTE</option>
-              <option value="EN_DESARROLLO">EN_DESARROLLO</option>
-              <option value="EN_REVISION">EN_REVISION</option>
-              <option value="COMPLETADO">COMPLETADO</option>
+              <option value="EN_SOPORTE">EN_SOPORTE</option>
+              <option value="ENTREGADO_AL_CLIENTE">ENTREGADO_AL_CLIENTE</option>
             </select>
           </div>
 
@@ -119,6 +120,26 @@ export default function CreateDesarrolloForm({ onSuccess }: CreateDesarrolloForm
             />
             <p className="text-xs text-gray-500 mt-1">Tiempo estimado para completar el desarrollo</p>
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="soportista" className="block text-sm font-medium text-gray-700 mb-1">
+            Soportista
+          </label>
+          <select
+            id="soportista"
+            value={formData.soportista || ''}
+            onChange={(e) =>
+              setFormData({ ...formData, soportista: e.target.value ? e.target.value as Desarrollo['soportista'] : undefined })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">Sin asignar</option>
+            <option value="jose">Jose</option>
+            <option value="estewill">Estewill</option>
+            <option value="darwin">Darwin</option>
+          </select>
+          <p className="text-xs text-gray-500 mt-1">Soportista al que se le entregará el soporte</p>
         </div>
 
         {error && (

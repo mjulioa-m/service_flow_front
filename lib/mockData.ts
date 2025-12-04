@@ -4,13 +4,14 @@ export interface Desarrollo {
   id: string;
   titulo: string;
   descripcion: string;
-  estado: 'PENDIENTE' | 'EN_DESARROLLO' | 'EN_REVISION' | 'COMPLETADO';
+  estado: 'PENDIENTE' | 'EN_SOPORTE' | 'ENTREGADO_AL_CLIENTE';
   horasEstimadas: number; // horas estimadas para completar
   sprintId?: string;
   tiempoGastado: number; // en segundos
   fechaCreacion: string;
   fechaActualizacion: string;
   comentarios?: Comentario[];
+  soportista?: 'jose' | 'estewill' | 'darwin';
 }
 
 export interface Comentario {
@@ -91,7 +92,7 @@ const defaultDesarrollos: Desarrollo[] = [
     id: '1',
     titulo: 'Setup Next.js + Tailwind & Estructura de Mocks',
     descripcion: "Inicializar proyecto Next.js, configurar Tailwind CSS con la paleta de colores institucional del Colombo. Crear estructura de carpetas para 'mock-data' (jsons).",
-    estado: 'EN_DESARROLLO',
+    estado: 'EN_SOPORTE',
     horasEstimadas: 3.0,
     sprintId: '1',
     tiempoGastado: 0,
@@ -102,7 +103,7 @@ const defaultDesarrollos: Desarrollo[] = [
     id: '2',
     titulo: 'Diseño de Layout Principal y Selector de Sede',
     descripcion: "Crear el Sidebar y Header. Incluir un selector visual prominente (Dropdown) para cambiar entre 'Sede Centro' y 'Sede Norte' que filtre la data visualmente.",
-    estado: 'EN_DESARROLLO',
+    estado: 'EN_SOPORTE',
     horasEstimadas: 4.0,
     sprintId: '1',
     tiempoGastado: 0,
