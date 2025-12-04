@@ -1,4 +1,7 @@
 // Datos mock para simular la base de datos - Sistema de Seguimiento de Desarrollos
+// Usa Google Sheets como base de datos principal, localStorage como fallback
+
+import { readFromSheets, writeToSheets, updateRowInSheets, deleteRowFromSheets, type SheetData } from './googleSheets';
 
 export interface Desarrollo {
   id: string;
@@ -66,8 +69,41 @@ const STORAGE_KEYS = {
   TICKETS: 'serviceflow_tickets',
 };
 
-const getFromStorage = <T>(key: string, defaultValue: T): T => {
+// Flag para saber si usar Google Sheets (se detecta automáticamente si hay credenciales)
+// En el cliente, intentamos usar Google Sheets si la API está disponible
+const USE_GOOGLE_SHEETS = typeof window !== 'undefined';
+
+const getFromStorage = async <T>(key: string, defaultValue: T): Promise<T> => {
   if (typeof window === 'undefined') return defaultValue;
+  
+  // Intentar leer desde Google Sheets primero
+  if (USE_GOOGLE_SHEETS) {
+    try {
+      const sheetData = await readFromSheets();
+      if (sheetData) {
+        const sheetKeyMap: Record<string, keyof SheetData> = {
+          'serviceflow_desarrollos': 'desarrollos',
+          'serviceflow_sprints': 'sprints',
+          'serviceflow_dailies': 'dailies',
+          'serviceflow_comentarios': 'comentarios',
+          'serviceflow_tickets': 'tickets',
+        };
+        const sheetKey = sheetKeyMap[key];
+        if (sheetKey && sheetData) {
+          const sheetValue = sheetData[sheetKey];
+          if (sheetValue && Array.isArray(sheetValue) && sheetValue.length > 0) {
+            // Sincronizar con localStorage como backup
+            localStorage.setItem(key, JSON.stringify(sheetValue));
+            return sheetValue as T;
+          }
+        }
+      }
+    } catch (error) {
+      // Silenciosamente fallar a localStorage
+    }
+  }
+  
+  // Fallback a localStorage
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : defaultValue;
@@ -77,12 +113,34 @@ const getFromStorage = <T>(key: string, defaultValue: T): T => {
   }
 };
 
-const saveToStorage = <T>(key: string, data: T): void => {
+const saveToStorage = async <T>(key: string, data: T): Promise<void> => {
   if (typeof window === 'undefined') return;
+  
+  // Mapear keys a nombres de hojas
+  const sheetNameMap: Record<string, string> = {
+    'serviceflow_desarrollos': 'desarrollos',
+    'serviceflow_sprints': 'sprints',
+    'serviceflow_dailies': 'dailies',
+    'serviceflow_comentarios': 'comentarios',
+    'serviceflow_tickets': 'tickets',
+  };
+  
+  const sheetName = sheetNameMap[key];
+  
+  // Siempre guardar en localStorage primero (más rápido)
   try {
     localStorage.setItem(key, JSON.stringify(data));
   } catch (error) {
     console.error(`Error saving ${key} to localStorage:`, error);
+  }
+  
+  // Si está configurado para usar Google Sheets, intentar escribir ahí también
+  if (USE_GOOGLE_SHEETS && sheetName && Array.isArray(data)) {
+    try {
+      await writeToSheets(sheetName, data);
+    } catch (error) {
+      // Silenciosamente fallar, ya tenemos localStorage como backup
+    }
   }
 };
 
@@ -256,62 +314,76 @@ const defaultDailies: Daily[] = [
 ];
 
 // Función para migrar/actualizar datos existentes
-const migrateData = (): { migratedDesarrollos: Desarrollo[]; migratedDailies: Daily[] } => {
+const migrateData = async (): Promise<{ migratedDesarrollos: Desarrollo[]; migratedDailies: Daily[] }> => {
   // Migrar desarrollos: poner tiempoGastado en 0 y asegurar horasEstimadas
-  const existingDesarrollos = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+  const existingDesarrollos = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
   const migratedDesarrollos = existingDesarrollos.map(desarrollo => ({
     ...desarrollo,
-    tiempoGastado: 0,
+    tiempoGastado: desarrollo.tiempoGastado || 0,
     horasEstimadas: desarrollo.horasEstimadas || 0,
   }));
   
   // Migrar dailies: poner tiempoGastado en 0 para todos los desarrollos
-  const existingDailies = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+  const existingDailies = await getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
   const migratedDailies = existingDailies.map(daily => ({
     ...daily,
     desarrollos: daily.desarrollos.map(dev => ({
       ...dev,
-      tiempoGastado: 0,
+      tiempoGastado: dev.tiempoGastado || 0,
     })),
   }));
   
   // Guardar datos migrados
   if (typeof window !== 'undefined') {
-    saveToStorage(STORAGE_KEYS.DESARROLLOS, migratedDesarrollos);
-    saveToStorage(STORAGE_KEYS.DAILIES, migratedDailies);
+    await saveToStorage(STORAGE_KEYS.DESARROLLOS, migratedDesarrollos);
+    await saveToStorage(STORAGE_KEYS.DAILIES, migratedDailies);
   }
   
   return { migratedDesarrollos, migratedDailies };
 };
 
 // Función para inicializar datos solo si no existen
-const initializeDataIfNeeded = () => {
+const initializeDataIfNeeded = async () => {
   if (typeof window === 'undefined') return;
   
-  // Solo inicializar si realmente no hay datos
+  // Intentar cargar desde Google Sheets primero
+  if (USE_GOOGLE_SHEETS) {
+    try {
+      const sheetData = await readFromSheets();
+      if (sheetData && sheetData.desarrollos && sheetData.desarrollos.length > 0) {
+        // Ya hay datos en Google Sheets, no inicializar
+        return;
+      }
+    } catch (error) {
+      console.warn('Error reading from Google Sheets during init:', error);
+    }
+  }
+  
+  // Solo inicializar si realmente no hay datos en localStorage
   if (!localStorage.getItem(STORAGE_KEYS.DESARROLLOS)) {
-    saveToStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    await saveToStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
   }
   if (!localStorage.getItem(STORAGE_KEYS.COMENTARIOS)) {
-    saveToStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
+    await saveToStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
   }
   if (!localStorage.getItem(STORAGE_KEYS.SPRINTS)) {
-    saveToStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+    await saveToStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
   }
   if (!localStorage.getItem(STORAGE_KEYS.DAILIES)) {
-    saveToStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+    await saveToStorage(STORAGE_KEYS.DAILIES, defaultDailies);
   }
   
   // Migrar datos existentes si hay datos en localStorage
   if (localStorage.getItem(STORAGE_KEYS.DESARROLLOS)) {
-    const { migratedDesarrollos, migratedDailies } = migrateData();
-    // Los datos migrados ya se guardaron en migrateData, solo actualizamos las variables
+    const { migratedDesarrollos, migratedDailies } = await migrateData();
+    await saveToStorage(STORAGE_KEYS.DESARROLLOS, migratedDesarrollos);
+    await saveToStorage(STORAGE_KEYS.DAILIES, migratedDailies);
   }
 };
 
-// Inicializar datos solo en el cliente
+// Inicializar datos solo en el cliente (async, pero no bloquea)
 if (typeof window !== 'undefined') {
-  initializeDataIfNeeded();
+  initializeDataIfNeeded().catch(console.error);
 }
 
 // Cargar datos desde localStorage o usar valores por defecto
@@ -325,9 +397,9 @@ let dailiesData: Daily[] = [];
 export const mockDesarrollosApi = {
   getAll: async (): Promise<Desarrollo[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    // Siempre recargar desde localStorage para obtener datos actualizados
-    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
-    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
+    // Siempre recargar desde Google Sheets o localStorage para obtener datos actualizados
+    desarrollosData = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    comentariosData = await getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     return desarrollosData.map(desarrollo => ({
       ...desarrollo,
       comentarios: comentariosData.filter(c => c.desarrolloId === desarrollo.id),
@@ -336,9 +408,9 @@ export const mockDesarrollosApi = {
 
   getById: async (id: string): Promise<Desarrollo> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    // Recargar desde localStorage para obtener datos actualizados
-    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
-    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
+    // Recargar desde Google Sheets o localStorage para obtener datos actualizados
+    desarrollosData = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    comentariosData = await getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     const desarrollo = desarrollosData.find(d => d.id === id);
     if (!desarrollo) {
       throw new Error('Desarrollo no encontrado');
@@ -351,8 +423,8 @@ export const mockDesarrollosApi = {
 
   create: async (data: Omit<Desarrollo, 'id' | 'fechaCreacion' | 'fechaActualizacion' | 'tiempoGastado'>): Promise<Desarrollo> => {
     await new Promise(resolve => setTimeout(resolve, 400));
-    // Recargar datos actuales desde localStorage antes de crear
-    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    // Recargar datos actuales desde Google Sheets o localStorage antes de crear
+    desarrollosData = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const newDesarrollo: Desarrollo = {
       ...data,
       id: Date.now().toString(),
@@ -362,14 +434,14 @@ export const mockDesarrollosApi = {
       fechaActualizacion: new Date().toISOString(),
     };
     desarrollosData.push(newDesarrollo);
-    saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+    await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
     return newDesarrollo;
   },
 
   update: async (id: string, data: Partial<Desarrollo>): Promise<Desarrollo> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    // Recargar datos actuales desde localStorage antes de actualizar
-    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    // Recargar datos actuales desde Google Sheets o localStorage antes de actualizar
+    desarrollosData = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const index = desarrollosData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Desarrollo no encontrado');
@@ -379,29 +451,53 @@ export const mockDesarrollosApi = {
       ...data,
       fechaActualizacion: new Date().toISOString(),
     };
-    saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+    
+    // Si usa Google Sheets, actualizar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await updateRowInSheets('desarrollos', id, desarrollosData[index]);
+      } catch (error) {
+        console.warn('Error updating in Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+    }
+    
     return desarrollosData[index];
   },
 
   addTime: async (id: string, seconds: number): Promise<Desarrollo> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    // Recargar datos actuales desde localStorage antes de actualizar
-    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    // Recargar datos actuales desde Google Sheets o localStorage antes de actualizar
+    desarrollosData = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const index = desarrollosData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Desarrollo no encontrado');
     }
     desarrollosData[index].tiempoGastado += seconds;
     desarrollosData[index].fechaActualizacion = new Date().toISOString();
-    saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+    
+    // Si usa Google Sheets, actualizar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await updateRowInSheets('desarrollos', id, desarrollosData[index]);
+      } catch (error) {
+        console.warn('Error updating in Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+    }
+    
     return desarrollosData[index];
   },
 
   delete: async (id: string): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    // Recargar datos actuales desde localStorage antes de eliminar
-    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
-    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
+    // Recargar datos actuales desde Google Sheets o localStorage antes de eliminar
+    desarrollosData = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    comentariosData = await getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     const index = desarrollosData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Desarrollo no encontrado');
@@ -409,8 +505,25 @@ export const mockDesarrollosApi = {
     desarrollosData.splice(index, 1);
     // También eliminar comentarios asociados
     comentariosData = comentariosData.filter(c => c.desarrolloId !== id);
-    saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
-    saveToStorage(STORAGE_KEYS.COMENTARIOS, comentariosData);
+    
+    // Si usa Google Sheets, eliminar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await deleteRowFromSheets('desarrollos', id);
+        // Eliminar comentarios asociados
+        const comentariosAEliminar = comentariosData.filter(c => c.desarrolloId === id);
+        for (const comentario of comentariosAEliminar) {
+          await deleteRowFromSheets('comentarios', comentario.id);
+        }
+      } catch (error) {
+        console.warn('Error deleting from Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+        await saveToStorage(STORAGE_KEYS.COMENTARIOS, comentariosData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+      await saveToStorage(STORAGE_KEYS.COMENTARIOS, comentariosData);
+    }
     
     // Disparar evento para notificar a otras páginas
     if (typeof window !== 'undefined') {
@@ -423,13 +536,13 @@ export const mockDesarrollosApi = {
 export const mockComentariosApi = {
   getByDesarrollo: async (desarrolloId: string): Promise<Comentario[]> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
+    comentariosData = await getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     return comentariosData.filter(c => c.desarrolloId === desarrolloId);
   },
 
   create: async (desarrolloId: string, data: { contenido: string }): Promise<Comentario> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    comentariosData = getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
+    comentariosData = await getFromStorage(STORAGE_KEYS.COMENTARIOS, defaultComentarios);
     const newComentario: Comentario = {
       id: Date.now().toString(),
       desarrolloId,
@@ -437,7 +550,7 @@ export const mockComentariosApi = {
       fechaCreacion: new Date().toISOString(),
     };
     comentariosData.push(newComentario);
-    saveToStorage(STORAGE_KEYS.COMENTARIOS, comentariosData);
+    await saveToStorage(STORAGE_KEYS.COMENTARIOS, comentariosData);
     return newComentario;
   },
 };
@@ -446,13 +559,13 @@ export const mockComentariosApi = {
 export const mockSprintsApi = {
   getAll: async (): Promise<Sprint[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+    sprintsData = await getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     return sprintsData;
   },
 
   getById: async (id: string): Promise<Sprint> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+    sprintsData = await getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     const sprint = sprintsData.find(s => s.id === id);
     if (!sprint) {
       throw new Error('Sprint no encontrado');
@@ -462,32 +575,44 @@ export const mockSprintsApi = {
 
   create: async (data: Omit<Sprint, 'id'>): Promise<Sprint> => {
     await new Promise(resolve => setTimeout(resolve, 400));
-    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+    sprintsData = await getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     const newSprint: Sprint = {
       ...data,
       id: Date.now().toString(),
     };
     sprintsData.push(newSprint);
-    saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
+    await saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
     return newSprint;
   },
 
   update: async (id: string, data: Partial<Sprint>): Promise<Sprint> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+    sprintsData = await getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
     const index = sprintsData.findIndex(s => s.id === id);
     if (index === -1) {
       throw new Error('Sprint no encontrado');
     }
     sprintsData[index] = { ...sprintsData[index], ...data };
-    saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
+    
+    // Si usa Google Sheets, actualizar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await updateRowInSheets('sprints', id, sprintsData[index]);
+      } catch (error) {
+        console.warn('Error updating in Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
+    }
+    
     return sprintsData[index];
   },
 
   delete: async (id: string): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    sprintsData = getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
-    desarrollosData = getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
+    sprintsData = await getFromStorage(STORAGE_KEYS.SPRINTS, defaultSprints);
+    desarrollosData = await getFromStorage(STORAGE_KEYS.DESARROLLOS, defaultDesarrollos);
     const index = sprintsData.findIndex(s => s.id === id);
     if (index === -1) {
       throw new Error('Sprint no encontrado');
@@ -498,10 +623,21 @@ export const mockSprintsApi = {
         desarrollo.sprintId = undefined;
       }
     });
-    saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
+    await saveToStorage(STORAGE_KEYS.DESARROLLOS, desarrollosData);
     
     sprintsData.splice(index, 1);
-    saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
+    
+    // Si usa Google Sheets, eliminar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await deleteRowFromSheets('sprints', id);
+      } catch (error) {
+        console.warn('Error deleting from Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.SPRINTS, sprintsData);
+    }
     
     // Disparar evento para notificar a otras páginas
     if (typeof window !== 'undefined') {
@@ -514,14 +650,14 @@ export const mockSprintsApi = {
 export const mockDailiesApi = {
   getAll: async (): Promise<Daily[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    // Siempre recargar desde localStorage
-    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+    // Siempre recargar desde Google Sheets o localStorage
+    dailiesData = await getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     return dailiesData;
   },
 
   getById: async (id: string): Promise<Daily> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+    dailiesData = await getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const daily = dailiesData.find(d => d.id === id);
     if (!daily) {
       throw new Error('Daily no encontrado');
@@ -531,59 +667,82 @@ export const mockDailiesApi = {
 
   getBySprint: async (sprintId: string): Promise<Daily[]> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+    dailiesData = await getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     return dailiesData.filter(d => d.sprintId === sprintId);
   },
 
   create: async (data: Omit<Daily, 'id'>): Promise<Daily> => {
     await new Promise(resolve => setTimeout(resolve, 400));
-    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+    dailiesData = await getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const newDaily: Daily = {
       ...data,
       id: Date.now().toString(),
     };
     dailiesData.push(newDaily);
-    saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+    await saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
     return newDaily;
   },
 
   update: async (id: string, data: Partial<Daily>): Promise<Daily> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+    dailiesData = await getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const index = dailiesData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Daily no encontrado');
     }
     dailiesData[index] = { ...dailiesData[index], ...data };
-    saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+    
+    // Si usa Google Sheets, actualizar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await updateRowInSheets('dailies', id, dailiesData[index]);
+      } catch (error) {
+        console.warn('Error updating in Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+    }
+    
     return dailiesData[index];
   },
 
   delete: async (id: string): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    dailiesData = getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
+    dailiesData = await getFromStorage(STORAGE_KEYS.DAILIES, defaultDailies);
     const index = dailiesData.findIndex(d => d.id === id);
     if (index === -1) {
       throw new Error('Daily no encontrado');
     }
     dailiesData.splice(index, 1);
-    saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+    
+    // Si usa Google Sheets, eliminar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await deleteRowFromSheets('dailies', id);
+      } catch (error) {
+        console.warn('Error deleting from Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.DAILIES, dailiesData);
+    }
   },
 };
 
 // Funciones para Tickets
-let ticketsData: Ticket[] = getFromStorage(STORAGE_KEYS.TICKETS, []);
+let ticketsData: Ticket[] = [];
 
 export const mockTicketsApi = {
   getAll: async (): Promise<Ticket[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    ticketsData = await getFromStorage(STORAGE_KEYS.TICKETS, []);
     return ticketsData;
   },
 
   getById: async (id: string): Promise<Ticket> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    ticketsData = await getFromStorage(STORAGE_KEYS.TICKETS, []);
     const ticket = ticketsData.find(t => t.id === id);
     if (!ticket) {
       throw new Error('Ticket no encontrado');
@@ -593,7 +752,7 @@ export const mockTicketsApi = {
 
   create: async (data: Omit<Ticket, 'id' | 'fechaCreacion' | 'fechaActualizacion'>): Promise<Ticket> => {
     await new Promise(resolve => setTimeout(resolve, 400));
-    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    ticketsData = await getFromStorage(STORAGE_KEYS.TICKETS, []);
     const newTicket: Ticket = {
       ...data,
       id: Date.now().toString(),
@@ -601,13 +760,13 @@ export const mockTicketsApi = {
       fechaActualizacion: new Date().toISOString(),
     };
     ticketsData.push(newTicket);
-    saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+    await saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
     return newTicket;
   },
 
   update: async (id: string, data: Partial<Ticket>): Promise<Ticket> => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    ticketsData = await getFromStorage(STORAGE_KEYS.TICKETS, []);
     const index = ticketsData.findIndex(t => t.id === id);
     if (index === -1) {
       throw new Error('Ticket no encontrado');
@@ -617,18 +776,41 @@ export const mockTicketsApi = {
       ...data,
       fechaActualizacion: new Date().toISOString(),
     };
-    saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+    
+    // Si usa Google Sheets, actualizar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await updateRowInSheets('tickets', id, ticketsData[index]);
+      } catch (error) {
+        console.warn('Error updating in Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+    }
+    
     return ticketsData[index];
   },
 
   delete: async (id: string): Promise<void> => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    ticketsData = getFromStorage(STORAGE_KEYS.TICKETS, []);
+    ticketsData = await getFromStorage(STORAGE_KEYS.TICKETS, []);
     const index = ticketsData.findIndex(t => t.id === id);
     if (index === -1) {
       throw new Error('Ticket no encontrado');
     }
     ticketsData.splice(index, 1);
-    saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+    
+    // Si usa Google Sheets, eliminar la fila específica
+    if (USE_GOOGLE_SHEETS) {
+      try {
+        await deleteRowFromSheets('tickets', id);
+      } catch (error) {
+        console.warn('Error deleting from Google Sheets, using full write:', error);
+        await saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+      }
+    } else {
+      await saveToStorage(STORAGE_KEYS.TICKETS, ticketsData);
+    }
   },
 };
